@@ -1,11 +1,16 @@
-package com.plotarmor.storage;
+package com.plotarmordb.storage;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.plotarmor.model.Vector;
+
+import com.plotarmordb.model.Vector;
+
 import org.rocksdb.*;
+
 import org.springframework.stereotype.Component;
+
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;

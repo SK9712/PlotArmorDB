@@ -1,6 +1,5 @@
-package com.plotarmor.model;
+package com.plotarmordb.model;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.Map;
 
 public class Vector {

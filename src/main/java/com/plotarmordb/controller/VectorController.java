@@ -1,9 +1,11 @@
-package com.plotarmor.controller;
+package com.plotarmordb.controller;
 
-import com.plotarmor.model.Vector;
-import com.plotarmor.storage.VectorStorage;
+import com.plotarmordb.model.Vector;
+import com.plotarmordb.storage.VectorStorage;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
 import java.util.UUID;
 
 @RestController

@@ -1,4 +1,4 @@
-package com.plotarmor;
+package com.plotarmordb;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
