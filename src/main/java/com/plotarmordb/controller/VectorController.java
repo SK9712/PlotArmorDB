@@ -1,17 +1,25 @@
 package com.plotarmordb.controller;
 
+import com.plotarmordb.model.SearchRequest;
+import com.plotarmordb.model.SearchResult;
 import com.plotarmordb.model.Vector;
+import com.plotarmordb.service.VectorSearchService;
 import com.plotarmordb.storage.VectorStorage;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.UUID;
 
 @RestController
 @RequestMapping("/vectors")
 public class VectorController {
     private final VectorStorage storage;
+
+    @Autowired
+    private VectorSearchService searchService;
 
     public VectorController(VectorStorage storage) {
         this.storage = storage;
@@ -48,6 +56,19 @@ public class VectorController {
         try {
             storage.delete(id);
             return ResponseEntity.ok().build();
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    @PostMapping("/search")
+    public ResponseEntity<List<SearchResult>> search(@RequestBody SearchRequest request) {
+        try {
+            List<SearchResult> results = searchService.search(
+                    request.getQueryVector(),
+                    request.getTopK()
+            );
+            return ResponseEntity.ok(results);
         } catch (Exception e) {
             return ResponseEntity.internalServerError().build();
         }

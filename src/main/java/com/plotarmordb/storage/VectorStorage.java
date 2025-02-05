@@ -1,11 +1,9 @@
 package com.plotarmordb.storage;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-
 import com.plotarmordb.model.Vector;
 
 import org.rocksdb.*;
-
 import org.springframework.stereotype.Component;
 
 import jakarta.annotation.PostConstruct;
@@ -14,6 +12,8 @@ import jakarta.annotation.PreDestroy;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 @Component
@@ -63,5 +63,18 @@ public class VectorStorage {
     public void delete(String id) throws RocksDBException {
         byte[] key = id.getBytes();
         db.delete(key);
+    }
+
+    public List<Vector> scanAll() throws RocksDBException, IOException {
+        List<Vector> vectors = new ArrayList<>();
+        try (RocksIterator iterator = db.newIterator()) {
+            iterator.seekToFirst();
+            while (iterator.isValid()) {
+                Vector vector = objectMapper.readValue(iterator.value(), Vector.class);
+                vectors.add(vector);
+                iterator.next();
+            }
+        }
+        return vectors;
     }
 }
