@@ -2,7 +2,9 @@ package com.plotarmordb.controller;
 
 import com.plotarmordb.model.SearchRequest;
 import com.plotarmordb.model.SearchResult;
+import com.plotarmordb.model.TextRequest;
 import com.plotarmordb.model.Vector;
+import com.plotarmordb.service.TextEmbeddingService;
 import com.plotarmordb.service.VectorSearchService;
 import com.plotarmordb.storage.VectorStorage;
 
@@ -20,6 +22,9 @@ public class VectorController {
 
     @Autowired
     private VectorSearchService searchService;
+
+    @Autowired
+    private TextEmbeddingService textEmbeddingService;
 
     public VectorController(VectorStorage storage) {
         this.storage = storage;
@@ -69,6 +74,27 @@ public class VectorController {
                     request.getTopK()
             );
             return ResponseEntity.ok(results);
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    @PostMapping("/text")
+    public ResponseEntity<Vector> createVectorFromText(@RequestBody TextRequest request) {
+        try {
+            // Generate embedding from text
+            float[] embedding = textEmbeddingService.generateEmbedding(request.getText());
+
+            // Create new vector with generated embedding
+            Vector vector = new Vector();
+            vector.setId(UUID.randomUUID().toString());
+            vector.setValues(embedding);
+            vector.setMetadata(request.getMetadata());
+
+            // Store the vector
+            storage.store(vector);
+
+            return ResponseEntity.ok(vector);
         } catch (Exception e) {
             return ResponseEntity.internalServerError().build();
         }
