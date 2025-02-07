@@ -1,6 +1,7 @@
 package com.plotarmordb.service;
 
 import com.plotarmordb.model.SearchResult;
+import com.plotarmordb.model.Vector;
 import com.plotarmordb.storage.VectorStorage;
 import org.springframework.stereotype.Service;
 
@@ -15,15 +16,20 @@ public class VectorSearchService {
         this.storage = storage;
     }
 
-    public List<SearchResult> search(float[] queryVector, int topK) {
+    public List<SearchResult> search(float[] queryVector, int topK, Map<String, String> filter) {
         List<SearchResult> results = new ArrayList<>();
 
         try {
-            // Iterate through all vectors (brute-force)
-            storage.scanAll().forEach(vector -> {
+            // Get all vectors and filter by metadata
+            List<Vector> filteredVectors = storage.scanAll().stream()
+                    .filter(vector -> matchesFilter(vector, filter))
+                    .collect(Collectors.toList());
+
+            // Calculate similarities
+            for (Vector vector : filteredVectors) {
                 double similarity = cosineSimilarity(queryVector, vector.getValues());
                 results.add(new SearchResult(vector, similarity));
-            });
+            }
 
             // Sort by similarity (descending) and return top-K
             return results.stream()
@@ -33,6 +39,23 @@ public class VectorSearchService {
         } catch (Exception e) {
             throw new RuntimeException("Search failed", e);
         }
+    }
+
+    private boolean matchesFilter(Vector vector, Map<String, String> filter) {
+        if (filter == null || filter.isEmpty()) {
+            return true;
+        }
+
+        Map<String, String> metadata = vector.getMetadata();
+        if (metadata == null) {
+            return false;
+        }
+
+        return filter.entrySet().stream()
+                .allMatch(entry ->
+                        metadata.containsKey(entry.getKey()) &&
+                                metadata.get(entry.getKey()).equals(entry.getValue())
+                );
     }
 
     private double cosineSimilarity(float[] v1, float[] v2) {

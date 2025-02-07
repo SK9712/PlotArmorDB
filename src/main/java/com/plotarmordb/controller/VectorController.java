@@ -71,7 +71,8 @@ public class VectorController {
         try {
             List<SearchResult> results = searchService.search(
                     request.getQueryVector(),
-                    request.getTopK()
+                    request.getTopK(),
+                    request.getFilter()
             );
             return ResponseEntity.ok(results);
         } catch (Exception e) {
