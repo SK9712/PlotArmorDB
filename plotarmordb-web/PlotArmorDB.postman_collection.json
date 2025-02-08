@@ -1,0 +1,91 @@
+{
+	"info": {
+		"_postman_id": "8a291485-7971-4534-ba3c-41286d5f246a",
+		"name": "PlotArmorDB",
+		"description": "PlotArmorDB is a high-performance, Java-based vector database designed for AI-powered semantic search, recommendation systems, and LLM-based retrieval. It provides fast, scalable, and resilient vector search optimized for real-time AI applications.EndFragment",
+		"schema": "https://schema.getpostman.com/json/collection/v2.0.0/collection.json",
+		"_exporter_id": "20863794"
+	},
+	"item": [
+		{
+			"name": "Create Vector",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"values\": [0.5, 0.6, 0.1],\r\n    \"metadata\":{\r\n        \"category\": \"Tech\"\r\n    }\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": "http://localhost:8080/vectors"
+			},
+			"response": []
+		},
+		{
+			"name": "Get Vector",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": "http://localhost:8080/vectors/6adbd4af-fa67-4aff-a58b-755afec6a285"
+			},
+			"response": []
+		},
+		{
+			"name": "Delete Vector",
+			"request": {
+				"method": "DELETE",
+				"header": [],
+				"url": "http://localhost:8080/vectors/6adbd4af-fa67-4aff-a58b-755afec6a285"
+			},
+			"response": []
+		},
+		{
+			"name": "Search Vector",
+			"request": {
+				"method": "GET",
+				"header": []
+			},
+			"response": []
+		},
+		{
+			"name": "Create Vector From Text",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"text\": \"Hello World\",\r\n    \"metadata\":{\r\n        \"category\": \"Tech\"\r\n    }\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": "http://localhost:8080/vectors/text"
+			},
+			"response": []
+		},
+		{
+			"name": "Search Vector From Text",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"query\": \"Hello World\",\r\n    \"topK\": 5,\r\n    \"filter\":{\r\n        \"category\": \"Tech\"\r\n    }\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": "http://localhost:8080/vectors/search/text"
+			},
+			"response": []
+		}
+	]
+}
