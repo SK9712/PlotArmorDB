@@ -9,7 +9,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 
@@ -33,44 +32,14 @@ public class VectorController {
                 vector.setId(UUID.randomUUID().toString());
             }
 
-            // Get current vector values
-            float[] values = vector.getValues();
-
-            // Create padded vector
-            float[] paddedValues = new float[10000];
-            Arrays.fill(paddedValues, 0.0f); // Fill with zeros for padding
-
-            // Copy original values or truncate if too long
-            if (values != null) {
-                int copyLength = Math.min(values.length, 10000);
-                System.arraycopy(values, 0, paddedValues, 0, copyLength);
-
-                // Normalize the padded vector
-                normalizeVector(paddedValues);
-            }
-
             // Update vector with padded values
-            vector.setValues(paddedValues);
+            vector.setValues(textEmbeddingService.getPaddedValues(vector.getValues()));
 
             // Store the padded vector
             storage.store(vector);
             return ResponseEntity.ok(vector);
         } catch (Exception e) {
             return ResponseEntity.internalServerError().build();
-        }
-    }
-
-    private void normalizeVector(float[] vector) {
-        float sumSquares = 0.0f;
-        for (float value : vector) {
-            sumSquares += value * value;
-        }
-
-        if (sumSquares > 0) {
-            float magnitude = (float) Math.sqrt(sumSquares);
-            for (int i = 0; i < vector.length; i++) {
-                vector[i] = vector[i] / magnitude;
-            }
         }
     }
 
@@ -99,7 +68,7 @@ public class VectorController {
     public ResponseEntity<List<SearchResult>> search(@RequestBody SearchRequest request) {
         try {
             List<SearchResult> results = searchService.search(
-                    request.getQueryVector(),
+                    textEmbeddingService.getPaddedValues(request.getQueryVector()),
                     request.getTopK(),
                     request.getFilter()
             );

@@ -71,6 +71,24 @@ public class TextEmbeddingService {
         return MAX_VOCABULARY_SIZE; // Term not in vocabulary
     }
 
+    public float[] getPaddedValues(float[] values) {
+
+        // Create padded vector
+        float[] paddedValues = new float[MAX_VOCABULARY_SIZE];
+        Arrays.fill(paddedValues, 0.0f); // Fill with zeros for padding
+
+        // Copy original values or truncate if too long
+        if (values != null) {
+            int copyLength = Math.min(values.length, MAX_VOCABULARY_SIZE);
+            System.arraycopy(values, 0, paddedValues, 0, copyLength);
+
+            // Normalize the padded vector
+            normalizeVector(paddedValues);
+        }
+
+        return paddedValues;
+    }
+
     private void normalizeVector(float[] vector) {
         float sumSquares = 0.0f;
         for (float value : vector) {
