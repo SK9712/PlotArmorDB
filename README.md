@@ -1,5 +1,5 @@
 # PlotArmorDB
-PlotArmorDB is a high-performance, Java-based vector database designed for AI-powered semantic search, recommendation systems, and LLM-based retrieval. It provides fast, scalable, and resilient vector search optimized for real-time AI applications.
+PlotArmorDB is a high-performance, Java-based vectorData database designed for AI-powered semantic search, recommendation systems, and LLM-based retrieval. It provides fast, scalable, and resilient vectorData search optimized for real-time AI applications.
 
 ## Why "PlotArmorDB"?
 Like characters with plot armor in stories, your data always survives, adapts, and delivers fast, reliable results—no matter the challenge!
@@ -37,7 +37,7 @@ docker stats plotarmordb
 ```
 
 Access the API:
-- REST API: http://localhost:8080/vectors
+- REST API: http://localhost:8080/vectorData
 - Swagger UI: http://localhost:8080/swagger-ui.html 
 - Health check: http://localhost:8080/actuator/health
 
@@ -45,16 +45,16 @@ Access the API:
 
 - Vector storage with RocksDB backend
 - Fast nearest neighbor search using virtual threads
-- Text-to-vector conversion
-- Hybrid search (vector + keyword filtering)
+- Text-to-vectorData conversion
+- Hybrid search (vectorData + keyword filtering)
 - Result caching
 - Docker support with health monitoring
 
 ## API Examples
 
-Store vector:
+Store vectorData:
 ```bash
-curl -X POST http://localhost:8080/vectors \
+curl -X POST http://localhost:8080/vectorData \
   -H "Content-Type: application/json" \
   -d '{
     "values": [0.1, 0.2, 0.3],
@@ -62,9 +62,9 @@ curl -X POST http://localhost:8080/vectors \
   }'
 ```
 
-Search vectors:
+Search vectorData:
 ```bash
-curl -X POST http://localhost:8080/vectors/search \
+curl -X POST http://localhost:8080/vectorData/search \
   -H "Content-Type: application/json" \
   -d '{
     "queryVector": [0.1, 0.2, 0.3],
@@ -75,7 +75,7 @@ curl -X POST http://localhost:8080/vectors/search \
 
 Create from text:
 ```bash
-curl -X POST http://localhost:8080/vectors/text \
+curl -X POST http://localhost:8080/vectorData/text \
   -H "Content-Type: application/json" \
   -d '{
     "text": "Example document text",
