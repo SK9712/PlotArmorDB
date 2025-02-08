@@ -1,9 +1,6 @@
 package com.plotarmordb.controller;
 
-import com.plotarmordb.model.SearchRequest;
-import com.plotarmordb.model.SearchResult;
-import com.plotarmordb.model.TextRequest;
-import com.plotarmordb.model.Vector;
+import com.plotarmordb.model.*;
 import com.plotarmordb.service.TextEmbeddingService;
 import com.plotarmordb.service.VectorSearchService;
 import com.plotarmordb.storage.VectorStorage;
@@ -12,13 +9,16 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 
 @RestController
 @RequestMapping("/vectors")
 public class VectorController {
-    private final VectorStorage storage;
+
+    @Autowired
+    private VectorStorage storage;
 
     @Autowired
     private VectorSearchService searchService;
@@ -26,22 +26,51 @@ public class VectorController {
     @Autowired
     private TextEmbeddingService textEmbeddingService;
 
-    public VectorController(VectorStorage storage) {
-        this.storage = storage;
-    }
-
     @PostMapping
     public ResponseEntity<Vector> createVector(@RequestBody Vector vector) {
         try {
-            // Generate ID if not provided
             if (vector.getId() == null) {
                 vector.setId(UUID.randomUUID().toString());
             }
 
+            // Get current vector values
+            float[] values = vector.getValues();
+
+            // Create padded vector
+            float[] paddedValues = new float[10000];
+            Arrays.fill(paddedValues, 0.0f); // Fill with zeros for padding
+
+            // Copy original values or truncate if too long
+            if (values != null) {
+                int copyLength = Math.min(values.length, 10000);
+                System.arraycopy(values, 0, paddedValues, 0, copyLength);
+
+                // Normalize the padded vector
+                normalizeVector(paddedValues);
+            }
+
+            // Update vector with padded values
+            vector.setValues(paddedValues);
+
+            // Store the padded vector
             storage.store(vector);
             return ResponseEntity.ok(vector);
         } catch (Exception e) {
             return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    private void normalizeVector(float[] vector) {
+        float sumSquares = 0.0f;
+        for (float value : vector) {
+            sumSquares += value * value;
+        }
+
+        if (sumSquares > 0) {
+            float magnitude = (float) Math.sqrt(sumSquares);
+            for (int i = 0; i < vector.length; i++) {
+                vector[i] = vector[i] / magnitude;
+            }
         }
     }
 
@@ -96,6 +125,16 @@ public class VectorController {
             storage.store(vector);
 
             return ResponseEntity.ok(vector);
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    @PostMapping("/search/text")
+    public ResponseEntity<List<SearchResult>> searchByText(@RequestBody TextSearchRequest request) {
+        try {
+            List<SearchResult> results = searchService.searchByText(request);
+            return ResponseEntity.ok(results);
         } catch (Exception e) {
             return ResponseEntity.internalServerError().build();
         }

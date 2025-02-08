@@ -2,8 +2,10 @@ package com.plotarmordb.service;
 
 import com.plotarmordb.cache.SearchCache;
 import com.plotarmordb.model.SearchResult;
+import com.plotarmordb.model.TextSearchRequest;
 import com.plotarmordb.model.Vector;
 import com.plotarmordb.storage.VectorStorage;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
@@ -12,6 +14,8 @@ import java.util.*;
 public class VectorSearchService {
     private final VectorStorage storage;
     private final SearchCache cache;
+    @Autowired
+    private TextEmbeddingService textEmbeddingService;
 
     public VectorSearchService(VectorStorage storage, SearchCache cache) {
         this.storage = storage;
@@ -42,5 +46,13 @@ public class VectorSearchService {
         } catch (Exception e) {
             throw new RuntimeException("Search failed", e);
         }
+    }
+
+    public List<SearchResult> searchByText(TextSearchRequest request) {
+        // Convert text query to vector embedding
+        float[] queryVector = textEmbeddingService.generateEmbedding(request.getQuery());
+
+        // Perform vector search
+        return search(queryVector, request.getTopK(), request.getFilter());
     }
 }
