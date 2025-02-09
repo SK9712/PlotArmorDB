@@ -7,11 +7,15 @@ import com.plotarmordb.core.exception.StorageException;
 
 import org.rocksdb.*;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
+import java.io.IOException;
+import java.nio.file.*;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.stream.Collectors;
 
 public class VectorStorage implements AutoCloseable {
     private RocksDB db;
@@ -19,32 +23,29 @@ public class VectorStorage implements AutoCloseable {
     private final StorageConfig config;
     private final ReadWriteLock lock;
     private final Options options;
-    private final Statistics statistics;
+    private final WriteOptions writeOptions;
+    private final ReadOptions readOptions;
 
     public VectorStorage(StorageConfig config) {
         this.config = config;
         this.objectMapper = new ObjectMapper();
         this.lock = new ReentrantReadWriteLock();
-        this.statistics = new Statistics();
         this.options = createOptions();
+        this.writeOptions = new WriteOptions().setSync(true);
+        this.readOptions = new ReadOptions().setVerifyChecksums(true);
         initialize();
     }
 
     private Options createOptions() {
-        Options options = new Options();
-        options.setCreateIfMissing(true);
-        options.setStatistics(statistics);
+        Options options = new Options()
+                .setCreateIfMissing(true)
+                .setWriteBufferSize(config.getWriteBufferSize())
+                .setMaxBackgroundCompactions(config.getMaxBackgroundJobs())
+                .setMaxBackgroundFlushes(config.getMaxBackgroundJobs())
+                .setLevelZeroFileNumCompactionTrigger(4)
+                .setLevelZeroSlowdownWritesTrigger(8)
+                .setLevelZeroStopWritesTrigger(12);
 
-        // Performance optimizations
-        options.setWriteBufferSize(config.getWriteBufferSize());
-        options.setMaxWriteBufferNumber(3);
-        options.setMinWriteBufferNumberToMerge(1);
-        options.setLevel0FileNumCompactionTrigger(4);
-        options.setLevel0SlowdownWritesTrigger(8);
-        options.setLevel0StopWritesTrigger(12);
-        options.setMaxBackgroundJobs(config.getMaxBackgroundJobs());
-
-        // Compression settings
         if (config.isCompressionEnabled()) {
             options.setCompressionType(CompressionType.LZ4_COMPRESSION);
         }
@@ -69,15 +70,13 @@ public class VectorStorage implements AutoCloseable {
     }
 
     public void store(Vector vector) {
-        if (vector == null || vector.getId() == null) {
-            throw new IllegalArgumentException("Vector and vector ID cannot be null");
-        }
+        validateVector(vector);
 
         lock.writeLock().lock();
         try {
             byte[] key = vector.getId().getBytes();
             byte[] value = objectMapper.writeValueAsBytes(vector);
-            db.put(key, value);
+            db.put(writeOptions, key, value);
         } catch (Exception e) {
             throw new StorageException("Failed to store vector: " + vector.getId(), e);
         } finally {
@@ -91,19 +90,16 @@ public class VectorStorage implements AutoCloseable {
         }
 
         lock.writeLock().lock();
-        try (WriteOptions writeOpts = new WriteOptions()) {
-            try (WriteBatch batch = new WriteBatch()) {
-                for (Vector vector : vectors) {
-                    if (vector.getId() != null) {
-                        byte[] key = vector.getId().getBytes();
-                        byte[] value = objectMapper.writeValueAsBytes(vector);
-                        batch.put(key, value);
-                    }
-                }
-                db.write(writeOpts, batch);
+        try (WriteBatch batch = new WriteBatch()) {
+            for (Vector vector : vectors) {
+                validateVector(vector);
+                byte[] key = vector.getId().getBytes();
+                byte[] value = objectMapper.writeValueAsBytes(vector);
+                batch.put(key, value);
             }
+            db.write(writeOptions, batch);
         } catch (Exception e) {
-            throw new StorageException("Failed to store batch of vectors", e);
+            throw new StorageException("Failed to store vector batch", e);
         } finally {
             lock.writeLock().unlock();
         }
@@ -117,7 +113,7 @@ public class VectorStorage implements AutoCloseable {
         lock.readLock().lock();
         try {
             byte[] key = id.getBytes();
-            byte[] value = db.get(key);
+            byte[] value = db.get(readOptions, key);
 
             if (value == null) {
                 return Optional.empty();
@@ -131,6 +127,24 @@ public class VectorStorage implements AutoCloseable {
         }
     }
 
+    public List<Vector> retrieveBatch(List<String> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        lock.readLock().lock();
+        try {
+            List<Vector> results = new ArrayList<>();
+            for (String id : ids) {
+                Optional<Vector> vector = retrieve(id);
+                vector.ifPresent(results::add);
+            }
+            return results;
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
     public void delete(String id) {
         if (id == null) {
             return;
@@ -139,7 +153,7 @@ public class VectorStorage implements AutoCloseable {
         lock.writeLock().lock();
         try {
             byte[] key = id.getBytes();
-            db.delete(key);
+            db.delete(writeOptions, key);
         } catch (Exception e) {
             throw new StorageException("Failed to delete vector: " + id, e);
         } finally {
@@ -149,13 +163,12 @@ public class VectorStorage implements AutoCloseable {
 
     public List<Vector> scanAll() {
         lock.readLock().lock();
-        try (RocksIterator iterator = db.newIterator()) {
+        try (RocksIterator iterator = db.newIterator(readOptions)) {
             List<Vector> vectors = new ArrayList<>();
             iterator.seekToFirst();
 
             while (iterator.isValid()) {
-                Vector vector = objectMapper.readValue(iterator.value(), Vector.class);
-                vectors.add(vector);
+                vectors.add(objectMapper.readValue(iterator.value(), Vector.class));
                 iterator.next();
             }
 
@@ -169,7 +182,7 @@ public class VectorStorage implements AutoCloseable {
 
     public List<Vector> scanRange(String startId, String endId, int limit) {
         lock.readLock().lock();
-        try (RocksIterator iterator = db.newIterator()) {
+        try (RocksIterator iterator = db.newIterator(readOptions)) {
             List<Vector> vectors = new ArrayList<>();
             byte[] startKey = startId != null ? startId.getBytes() : null;
 
@@ -184,8 +197,7 @@ public class VectorStorage implements AutoCloseable {
                     break;
                 }
 
-                Vector vector = objectMapper.readValue(iterator.value(), Vector.class);
-                vectors.add(vector);
+                vectors.add(objectMapper.readValue(iterator.value(), Vector.class));
                 iterator.next();
             }
 
@@ -201,8 +213,15 @@ public class VectorStorage implements AutoCloseable {
         lock.readLock().lock();
         try {
             Path path = Path.of(checkpointPath);
-            Files.createDirectories(path);
+            // Parent directory should exist
+            Files.createDirectories(path.getParent());
 
+            // If checkpoint directory exists, delete it first
+            if (Files.exists(path)) {
+                deleteDirectory(path);
+            }
+
+            // Create checkpoint (RocksDB will create the directory)
             try (Checkpoint checkpoint = Checkpoint.create(db)) {
                 checkpoint.createCheckpoint(checkpointPath);
             }
@@ -213,12 +232,84 @@ public class VectorStorage implements AutoCloseable {
         }
     }
 
-    public Map<String, String> getStatistics() {
+    public String createTimestampedBackup(String baseBackupPath) {
+        // Create base backup directory if it doesn't exist
+        try {
+            Files.createDirectories(Path.of(baseBackupPath));
+        } catch (IOException e) {
+            throw new StorageException("Failed to create backup directory: " + baseBackupPath, e);
+        }
+
+        // Generate timestamp and backup path
+        String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
+        String backupPath = Path.of(baseBackupPath, "backup_" + timestamp).toString();
+
+        // Create the backup
+        createBackup(backupPath);
+
+        return backupPath;
+    }
+
+    private void deleteDirectory(Path path) throws IOException {
+        if (!Files.exists(path)) {
+            return;
+        }
+
+        Files.walkFileTree(path, new SimpleFileVisitor<>() {
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                Files.delete(file);
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
+                Files.delete(dir);
+                return FileVisitResult.CONTINUE;
+            }
+        });
+    }
+    private void cleanupOldBackups(String baseBackupPath, int maxBackups) {
+        try {
+            Path basePath = Path.of(baseBackupPath);
+            if (!Files.exists(basePath)) {
+                return;
+            }
+
+            List<Path> backups = Files.list(basePath)
+                    .filter(path -> Files.isDirectory(path) &&
+                            path.getFileName().toString().startsWith("backup_"))
+                    .sorted()
+                    .collect(Collectors.toList());
+
+            while (backups.size() > maxBackups) {
+                Path oldestBackup = backups.remove(0);
+                deleteDirectory(oldestBackup);
+            }
+        } catch (IOException e) {
+            throw new StorageException("Failed to cleanup old backups", e);
+        }
+    }
+
+    private void validateVector(Vector vector) {
+        if (vector == null) {
+            throw new IllegalArgumentException("Vector cannot be null");
+        }
+        if (vector.getId() == null) {
+            throw new IllegalArgumentException("Vector ID cannot be null");
+        }
+        if (vector.getValues() == null || vector.getValues().length == 0) {
+            throw new IllegalArgumentException("Vector values cannot be null or empty");
+        }
+    }
+
+    public Map<String, String> getStatistics() throws Exception {
         return Map.of(
-                "totalBytes", String.valueOf(statistics.getTickerCount(TickerType.BYTES_WRITTEN)),
-                "numberOfKeys", String.valueOf(statistics.getTickerCount(TickerType.NUMBER_KEYS_WRITTEN)),
-                "writeOps", String.valueOf(statistics.getTickerCount(TickerType.BLOCK_CACHE_BYTES_WRITE)),
-                "readOps", String.valueOf(statistics.getTickerCount(TickerType.BLOCK_CACHE_BYTES_READ))
+                "estimateNumKeys", String.valueOf(db.getLongProperty("rocksdb.estimate-num-keys")),
+                "estimateTableReaders", String.valueOf(db.getLongProperty("rocksdb.estimate-table-readers-mem")),
+                "numImmutableMemTable", String.valueOf(db.getLongProperty("rocksdb.num-immutable-mem-table")),
+                "numRunningCompactions", String.valueOf(db.getLongProperty("rocksdb.num-running-compactions")),
+                "numRunningFlushes", String.valueOf(db.getLongProperty("rocksdb.num-running-flushes"))
         );
     }
 
@@ -226,14 +317,17 @@ public class VectorStorage implements AutoCloseable {
     public void close() {
         lock.writeLock().lock();
         try {
+            if (writeOptions != null) {
+                writeOptions.close();
+            }
+            if (readOptions != null) {
+                readOptions.close();
+            }
             if (db != null) {
                 db.close();
             }
             if (options != null) {
                 options.close();
-            }
-            if (statistics != null) {
-                statistics.close();
             }
         } finally {
             lock.writeLock().unlock();
