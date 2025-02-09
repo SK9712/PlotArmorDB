@@ -5,6 +5,7 @@ import com.plotarmordb.core.model.Vector;
 import com.plotarmordb.core.config.StorageConfig;
 import com.plotarmordb.core.exception.StorageException;
 
+import com.plotarmordb.core.search.VectorMath;
 import org.rocksdb.*;
 
 import java.io.IOException;
@@ -72,6 +73,9 @@ public class VectorStorage implements AutoCloseable {
     public void store(Vector vector) {
         validateVector(vector);
 
+        if(vector.getValues().length < 10000)
+            addPadding(vector);
+
         lock.writeLock().lock();
         try {
             byte[] key = vector.getId().getBytes();
@@ -84,6 +88,19 @@ public class VectorStorage implements AutoCloseable {
         }
     }
 
+    private void addPadding(Vector vector) {
+        float[] embedding = new float[10000];
+        int index = 0;
+        for (float value : vector.getValues()) {
+            if (index < 10000) {
+                embedding[index++] = value;
+            }
+        }
+        // Normalize the embedding vector
+        VectorMath.normalizeVector(embedding);
+        vector.setValues(embedding);
+    }
+
     public void storeBatch(List<Vector> vectors) {
         if (vectors == null || vectors.isEmpty()) {
             return;
@@ -93,6 +110,8 @@ public class VectorStorage implements AutoCloseable {
         try (WriteBatch batch = new WriteBatch()) {
             for (Vector vector : vectors) {
                 validateVector(vector);
+                if(vector.getValues().length < 10000)
+                    addPadding(vector);
                 byte[] key = vector.getId().getBytes();
                 byte[] value = objectMapper.writeValueAsBytes(vector);
                 batch.put(key, value);

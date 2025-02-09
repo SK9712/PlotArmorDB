@@ -36,22 +36,36 @@ public class VectorSearchEngine implements AutoCloseable {
     public List<SearchResult> search(float[] queryVector, int topK, Map<String, String> filter) {
         String filterHash = filter != null ? filter.toString() : "";
 
+        float[] paddedQueryVector = addPadding(queryVector);
         // Check cache first
-        List<SearchResult> cachedResults = cache.get(queryVector, topK, filterHash);
+        List<SearchResult> cachedResults = cache.get(paddedQueryVector, topK, filterHash);
         if (cachedResults != null) {
             return cachedResults;
         }
 
         try {
             List<Vector> vectors = storage.scanAll();
-            List<SearchResult> results = searchParallel(vectors, queryVector, topK, filter);
+            List<SearchResult> results = searchParallel(vectors, paddedQueryVector, topK, filter);
 
             // Cache results
-            cache.put(queryVector, topK, filterHash, results);
+            cache.put(paddedQueryVector, topK, filterHash, results);
             return results;
         } catch (Exception e) {
             throw new RuntimeException("Search failed", e);
         }
+    }
+
+    private float[] addPadding(float[] queryVector) {
+        float[] embedding = new float[10000];
+        int index = 0;
+        for (float value : queryVector) {
+            if (index < 10000) {
+                embedding[index++] = value;
+            }
+        }
+        // Normalize the embedding vector
+        VectorMath.normalizeVector(embedding);
+        return embedding;
     }
 
     public List<SearchResult> searchByText(String query, int topK, Map<String, String> filter) {
@@ -68,6 +82,8 @@ public class VectorSearchEngine implements AutoCloseable {
                 Comparator.comparingDouble(SearchResult::getSimilarity).reversed()
         );
 
+        float[] paddedQueryVector = addPadding(queryVector);
+
         try {
             List<Future<List<SearchResult>>> futures = new ArrayList<>();
             ExecutorService currentExecutor = executor.get();
@@ -75,7 +91,7 @@ public class VectorSearchEngine implements AutoCloseable {
             // Submit batch processing tasks
             for (List<Vector> batch : batches) {
                 futures.add(currentExecutor.submit(() ->
-                        processBatch(batch, queryVector, filter)));
+                        processBatch(batch, paddedQueryVector, filter)));
             }
 
             // Collect and merge results
@@ -100,11 +116,12 @@ public class VectorSearchEngine implements AutoCloseable {
     private List<SearchResult> processBatch(List<Vector> batch, float[] queryVector,
                                             Map<String, String> filter) {
         List<SearchResult> batchResults = new ArrayList<>();
+        float[] paddedQueryVector = addPadding(queryVector);
 
         for (Vector vector : batch) {
             if (matchesFilter(vector, filter)) {
                 double similarity = VectorMath.calculateCosineSimilarity(
-                        queryVector, vector.getValues());
+                        paddedQueryVector, vector.getValues());
                 batchResults.add(new SearchResult(vector, similarity));
             }
         }
